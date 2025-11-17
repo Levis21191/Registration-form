@@ -1,0 +1,113 @@
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import java.awt.*;
+import java.awt.event.*;
+import java.sql.*;
+
+public class RegistrationApp extends JFrame {
+    private JTextField nameField, mobileField;
+    private JRadioButton maleButton, femaleButton;
+    private JComboBox<String> dayBox, monthBox, yearBox;
+    private JTextArea addressArea;
+    private JCheckBox termsCheck;
+    private JButton submitButton, resetButton, exitButton;
+    private JTable table;
+    private DefaultTableModel tableModel;
+    private Connection conn;
+
+    public RegistrationApp() {
+        setTitle("Registration Form with Database");
+        setSize(900,500);
+        setLayout(new BorderLayout());
+        connectDB();
+
+        JPanel formPanel = new JPanel(new GridLayout(9,2,5,5));
+        formPanel.setBorder(BorderFactory.createTitledBorder("Register"));
+
+        formPanel.add(new JLabel("Name:")); nameField = new JTextField(); formPanel.add(nameField);
+        formPanel.add(new JLabel("Mobile:")); mobileField = new JTextField(); formPanel.add(mobileField);
+
+        formPanel.add(new JLabel("Gender:"));
+        JPanel genderPanel = new JPanel();
+        maleButton = new JRadioButton("Male"); femaleButton = new JRadioButton("Female");
+        ButtonGroup genderGroup = new ButtonGroup(); genderGroup.add(maleButton); genderGroup.add(femaleButton);
+        genderPanel.add(maleButton); genderPanel.add(femaleButton); formPanel.add(genderPanel);
+
+        formPanel.add(new JLabel("DOB:"));
+        JPanel dobPanel = new JPanel();
+        String[] days = new String[31]; for(int i=1;i<=31;i++) days[i-1]=String.valueOf(i); dayBox=new JComboBox<>(days);
+        String[] months={"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"}; monthBox=new JComboBox<>(months);
+        String[] years=new String[100]; int yearNow=2025; for(int i=0;i<100;i++) years[i]=String.valueOf(yearNow-i); yearBox=new JComboBox<>(years);
+        dobPanel.add(dayBox); dobPanel.add(monthBox); dobPanel.add(yearBox); formPanel.add(dobPanel);
+
+        formPanel.add(new JLabel("Address:")); addressArea = new JTextArea(3,20); formPanel.add(new JScrollPane(addressArea));
+
+        termsCheck = new JCheckBox("Accept Terms & Conditions"); formPanel.add(termsCheck); formPanel.add(new JLabel());
+
+        submitButton = new JButton("Submit"); resetButton = new JButton("Reset"); exitButton = new JButton("Exit");
+        formPanel.add(submitButton); formPanel.add(resetButton); formPanel.add(exitButton);
+
+        add(formPanel, BorderLayout.WEST);
+
+        tableModel = new DefaultTableModel(new String[]{"ID","Name","Mobile","Gender","DOB","Address"},0);
+        table = new JTable(tableModel);
+        add(new JScrollPane(table), BorderLayout.CENTER);
+
+        loadTable();
+
+        submitButton.addActionListener(e -> submitData());
+        resetButton.addActionListener(e -> resetForm());
+        exitButton.addActionListener(e -> { closeDB(); System.exit(0); });
+
+        setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> closeDB()));
+        setVisible(true);
+    }
+
+    private void connectDB() {
+        try {
+            Class.forName("org.sqlite.JDBC");
+            conn = DriverManager.getConnection("jdbc:sqlite:registration.db");
+            Statement stmt = conn.createStatement();
+            stmt.execute("CREATE TABLE IF NOT EXISTS students (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, mobile TEXT, gender TEXT, dob TEXT, address TEXT)");
+        } catch(Exception e){ e.printStackTrace(); }
+    }
+
+    private void closeDB() {
+        try{ if(conn!=null && !conn.isClosed()) conn.close(); } catch(Exception e){ e.printStackTrace(); }
+    }
+
+    private void submitData() {
+        if(!termsCheck.isSelected()){ JOptionPane.showMessageDialog(this,"Accept terms!"); return; }
+        try {
+            String name=nameField.getText(), mobile=mobileField.getText(),
+                   gender=maleButton.isSelected()?"Male":femaleButton.isSelected()?"Female":"",
+                   dob=dayBox.getSelectedItem()+"-"+monthBox.getSelectedItem()+"-"+yearBox.getSelectedItem(),
+                   address=addressArea.getText();
+            if(name.isEmpty() || mobile.isEmpty() || gender.isEmpty() || address.isEmpty()){ JOptionPane.showMessageDialog(this,"Fill all fields"); return; }
+            PreparedStatement pst = conn.prepareStatement("INSERT INTO students(name,mobile,gender,dob,address) VALUES(?,?,?,?,?)");
+            pst.setString(1,name); pst.setString(2,mobile); pst.setString(3,gender);
+            pst.setString(4,dob); pst.setString(5,address); pst.executeUpdate();
+            JOptionPane.showMessageDialog(this,"Registered!");
+            loadTable(); resetForm();
+        } catch(Exception e){ e.printStackTrace(); }
+    }
+
+    private void loadTable() {
+        try {
+            tableModel.setRowCount(0);
+            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM students");
+            while(rs.next()) tableModel.addRow(new Object[]{rs.getInt("id"), rs.getString("name"), rs.getString("mobile"), rs.getString("gender"), rs.getString("dob"), rs.getString("address")});
+        } catch(Exception e){ e.printStackTrace(); }
+    }
+
+    private void resetForm() {
+        nameField.setText(""); mobileField.setText(""); maleButton.setSelected(false); femaleButton.setSelected(false);
+        dayBox.setSelectedIndex(0); monthBox.setSelectedIndex(0); yearBox.setSelectedIndex(0);
+        addressArea.setText(""); termsCheck.setSelected(false);
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> new RegistrationApp());
+    }
+}
